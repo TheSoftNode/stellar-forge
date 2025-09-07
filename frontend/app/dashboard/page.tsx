@@ -16,48 +16,76 @@ import {
   Globe
 } from 'lucide-react';
 import { formatCurrency, formatPercentage, formatLargeNumber } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import { priceAPI, farmingAPI } from '@/lib/api';
 
 export default function DashboardOverview() {
-  // Mock data for now - will be replaced with real API calls
-  const mockFarmingStats = {
-    active_farmers: 287,
-    total_staked: 1250000,
-    current_emission_rate: 425,
-    farming_difficulty: 0.75,
-    network_health: 0.92,
-    current_price: 0.095420,
-    price_change_24h: 2.5
-  };
+  // Fetch real data from API
+  const { data: currentPrice, isLoading: priceLoading } = useQuery({
+    queryKey: ['current-price'],
+    queryFn: () => priceAPI.getCurrent(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  const { data: priceStats, isLoading: statsLoading } = useQuery({
+    queryKey: ['price-statistics'],
+    queryFn: () => priceAPI.getStatistics(24),
+    refetchInterval: 60000, // Refetch every minute
+  });
+
+  const { data: farmingStats, isLoading: farmingLoading } = useQuery({
+    queryKey: ['farming-stats'],
+    queryFn: () => farmingAPI.getStats(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  const { data: networkHealth, isLoading: healthLoading } = useQuery({
+    queryKey: ['network-health'],
+    queryFn: () => farmingAPI.getNetworkHealth(),
+    refetchInterval: 60000, // Refetch every minute
+  });
+
+  // Loading state
+  const isLoading = priceLoading || statsLoading || farmingLoading || healthLoading;
+
+  // Default values for loading state
+  const price = currentPrice?.price ?? 0;
+  const priceChange = priceStats?.price_24h_change_percent ?? 0;
+  const activeFarmers = farmingStats?.active_farmers ?? 0;
+  const totalStaked = farmingStats?.total_staked ?? 0;
+  const networkHealthScore = networkHealth?.overall_health_score ?? 0;
+  const emissionRate = farmingStats?.current_emission_rate ?? 0;
+  const farmingDifficulty = farmingStats?.farming_difficulty ?? 0;
 
   const quickStats = [
     {
-      title: 'Stellar Price',
-      value: formatCurrency(mockFarmingStats.current_price, 'USD', 4, 6),
-      change: `+${mockFarmingStats.price_change_24h}%`,
-      isPositive: true,
+      title: 'KALE Price',
+      value: isLoading ? '...' : formatCurrency(price, 'USD', 4, 6),
+      change: isLoading ? '...' : `${priceChange > 0 ? '+' : ''}${formatPercentage(priceChange, 1)}`,
+      isPositive: priceChange >= 0,
       icon: DollarSign,
       color: 'text-green-500'
     },
     {
       title: 'Active Farmers',
-      value: formatLargeNumber(mockFarmingStats.active_farmers),
-      change: '+12.3%',
+      value: isLoading ? '...' : formatLargeNumber(activeFarmers),
+      change: '+12.3%', // This would need historical data to calculate
       isPositive: true,
       icon: Users,
       color: 'text-teal-500'
     },
     {
       title: 'Total Staked',
-      value: formatLargeNumber(mockFarmingStats.total_staked) + ' XLM',
-      change: '+5.8%',
+      value: isLoading ? '...' : formatLargeNumber(totalStaked) + ' KALE',
+      change: '+5.8%', // This would need historical data to calculate
       isPositive: true,
       icon: Sprout,
       color: 'text-green-500'
     },
     {
       title: 'Network Health',
-      value: formatPercentage(mockFarmingStats.network_health * 100, 1, false),
-      change: '+0.5%',
+      value: isLoading ? '...' : formatPercentage(networkHealthScore * 100, 1, false),
+      change: '+0.5%', // This would need historical data to calculate
       isPositive: true,
       icon: Activity,
       color: 'text-pink-500'
@@ -68,21 +96,21 @@ export default function DashboardOverview() {
     {
       type: 'opportunity',
       title: 'Optimal Farming Conditions',
-      message: 'Current emission rate favorable for farming sessions',
+      message: isLoading ? 'Loading...' : `Current emission rate: ${emissionRate} KALE/min`,
       time: '5m ago',
       color: 'text-green-500'
     },
     {
       type: 'market',
       title: 'Price Movement Alert',
-      message: 'Stellar showing bullish momentum (+15% in 4h)',
+      message: isLoading ? 'Loading...' : `KALE showing ${priceChange >= 0 ? 'bullish' : 'bearish'} momentum (${formatPercentage(priceChange, 1)} in 24h)`,
       time: '12m ago',
       color: 'text-pink-500'
     },
     {
       type: 'network',
-      title: 'Network Update',
-      message: 'Emission rate decreased to 425 XLM/min',
+      title: 'Network Health',
+      message: isLoading ? 'Loading...' : `Network health score: ${formatPercentage(networkHealthScore * 100, 1)}`,
       time: '1h ago',
       color: 'text-yellow-600'
     }
@@ -203,30 +231,30 @@ export default function DashboardOverview() {
               <CardContent className="space-y-4 pt-0">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-400">24h Volume</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">Current Price</span>
                     <span className="text-sm font-medium text-slate-900 dark:text-white">
-                      {formatCurrency(89420, 'USD', 0)}
+                      {isLoading ? '...' : formatCurrency(price, 'USD', 4, 6)}
                     </span>
                   </div>
                   
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-600 dark:text-slate-400">24h High</span>
                     <span className="text-sm font-medium text-green-500">
-                      {formatCurrency(0.098234, 'USD', 4, 6)}
+                      {isLoading ? '...' : formatCurrency(priceStats?.price_24h_high ?? 0, 'USD', 4, 6)}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-600 dark:text-slate-400">24h Low</span>
                     <span className="text-sm font-medium text-red-500">
-                      {formatCurrency(0.092105, 'USD', 4, 6)}
+                      {isLoading ? '...' : formatCurrency(priceStats?.price_24h_low ?? 0, 'USD', 4, 6)}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-400">Market Cap</span>
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">
-                      {formatCurrency(2340000, 'USD', 0)}
+                    <span className="text-sm text-slate-600 dark:text-slate-400">24h Change</span>
+                    <span className={`text-sm font-medium ${priceChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      {isLoading ? '...' : `${priceChange >= 0 ? '+' : ''}${formatPercentage(priceChange, 2)}`}
                     </span>
                   </div>
                 </div>
@@ -276,25 +304,29 @@ export default function DashboardOverview() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-600 dark:text-slate-400">Emission Rate</span>
                     <span className="text-sm font-medium text-slate-900 dark:text-white">
-                      {mockFarmingStats.current_emission_rate} XLM/min
+                      {isLoading ? '...' : `${emissionRate} KALE/min`}
                     </span>
                   </div>
                   
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-600 dark:text-slate-400">Difficulty</span>
                     <span className="text-sm font-medium text-slate-900 dark:text-white">
-                      {formatPercentage(mockFarmingStats.farming_difficulty * 100, 1, false)}
+                      {isLoading ? '...' : formatPercentage(farmingDifficulty * 100, 1, false)}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-400">Active Sessions</span>
-                    <span className="text-sm font-medium text-green-500">143</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">Active Farmers</span>
+                    <span className="text-sm font-medium text-green-500">
+                      {isLoading ? '...' : formatLargeNumber(activeFarmers)}
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-400">Avg Session Time</span>
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">2.4h</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">Recent Harvests</span>
+                    <span className="text-sm font-medium text-slate-900 dark:text-white">
+                      {isLoading ? '...' : farmingStats?.recent_harvests ?? 0}
+                    </span>
                   </div>
                 </div>
               </CardContent>

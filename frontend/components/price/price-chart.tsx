@@ -1,16 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, BarChart3, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react';
 import { cn, formatCurrency, formatPercentage } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useQuery } from '@tanstack/react-query';
+import { priceAPI } from '@/lib/api';
 
 interface PriceData {
   timestamp: string;
   price: number;
-  volume: number;
-  change_24h: number;
+  volume?: number;
 }
 
 interface PriceChartProps {
@@ -20,61 +21,68 @@ interface PriceChartProps {
 }
 
 export function PriceChart({ className, timeframe = '24h', chartType = 'area' }: PriceChartProps) {
-  const [priceData, setPriceData] = useState<PriceData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentPrice, setCurrentPrice] = useState<number>(0);
-  const [change24h, setChange24h] = useState<number>(0);
+  // Fetch real price data from API
+  const { data: currentPriceData, isLoading: currentPriceLoading } = useQuery({
+    queryKey: ['current-price'],
+    queryFn: () => priceAPI.getCurrent(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
 
-  // Mock data generation for demo
-  useEffect(() => {
-    const generateMockData = () => {
-      const now = Date.now();
-      const data: PriceData[] = [];
-      const basePrice = 0.095420;
-      let currentMockPrice = basePrice;
-
-      const intervals = {
-        '1h': { points: 60, interval: 60 * 1000 }, // 1 minute intervals
-        '24h': { points: 24, interval: 60 * 60 * 1000 }, // 1 hour intervals  
-        '7d': { points: 7, interval: 24 * 60 * 60 * 1000 }, // 1 day intervals
-        '30d': { points: 30, interval: 24 * 60 * 60 * 1000 } // 1 day intervals
-      };
-
-      const config = intervals[timeframe];
-
-      for (let i = 0; i < config.points; i++) {
-        const timestamp = new Date(now - (config.points - i) * config.interval).toISOString();
-        
-        // Add some realistic price movement
-        const volatility = 0.02; // 2% volatility
-        const randomChange = (Math.random() - 0.5) * 2 * volatility;
-        currentMockPrice *= (1 + randomChange);
-        
-        // Ensure price stays within reasonable bounds
-        currentMockPrice = Math.max(0.08, Math.min(0.12, currentMockPrice));
-
-        data.push({
-          timestamp,
-          price: currentMockPrice,
-          volume: Math.random() * 100000 + 10000,
-          change_24h: ((currentMockPrice - basePrice) / basePrice) * 100
-        });
+  const { data: priceHistoryData, isLoading: historyLoading } = useQuery({
+    queryKey: ['price-history', timeframe],
+    queryFn: () => {
+      const now = new Date();
+      let startDate: Date;
+      
+      switch (timeframe) {
+        case '1h':
+          startDate = new Date(now.getTime() - 60 * 60 * 1000);
+          break;
+        case '24h':
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case '7d':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       }
+      
+      return priceAPI.getHistory({
+        start_date: startDate.toISOString(),
+        end_date: now.toISOString(),
+        limit: 100
+      });
+    },
+    refetchInterval: 60000, // Refetch every minute
+  });
 
-      return data;
-    };
+  const { data: priceStats } = useQuery({
+    queryKey: ['price-statistics'],
+    queryFn: () => priceAPI.getStatistics(24),
+    refetchInterval: 60000,
+  });
 
-    const mockData = generateMockData();
-    setPriceData(mockData);
-    
-    if (mockData.length > 0) {
-      const latest = mockData[mockData.length - 1];
-      setCurrentPrice(latest.price);
-      setChange24h(latest.change_24h);
-    }
-    
-    setLoading(false);
-  }, [timeframe]);
+  const loading = currentPriceLoading || historyLoading;
+  
+  // Use real data or fallback to current price for chart
+  const priceData: PriceData[] = priceHistoryData?.data.length ? 
+    priceHistoryData.data.map(item => ({
+      timestamp: item.timestamp,
+      price: item.price,
+      volume: 0 // API doesn't provide volume data yet
+    })) : 
+    currentPriceData ? [{
+      timestamp: currentPriceData.timestamp,
+      price: currentPriceData.price,
+      volume: 0
+    }] : [];
+
+  const currentPrice = currentPriceData?.price ?? 0;
+  const change24h = priceStats?.price_24h_change_percent ?? 0;
 
   const formatXAxisLabel = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -105,7 +113,7 @@ export function PriceChart({ className, timeframe = '24h', chartType = 'area' }:
             Price: {formatCurrency(data.price, 'USD', 4, 6)}
           </p>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Volume: {formatCurrency(data.volume, 'USD', 0)}
+            Source: {currentPriceData?.source || 'API'}
           </p>
         </div>
       );
@@ -138,7 +146,7 @@ export function PriceChart({ className, timeframe = '24h', chartType = 'area' }:
           <div>
             <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-white">
               <DollarSign className="h-5 w-5 text-teal-500" />
-              <span>Stellar Price</span>
+              <span>KALE Price</span>
             </CardTitle>
             <div className="flex items-center space-x-4 mt-2">
               <span className="text-2xl font-bold text-slate-900 dark:text-white">
