@@ -3,7 +3,6 @@
 import { motion } from 'framer-motion';
 import { ChevronRight, TrendingUp, Leaf, BarChart3 } from 'lucide-react';
 import { Logo } from './ui/logo';
-import { ThemeToggle } from './ui/theme-toggle';
 
 interface SplashScreenProps {
   onGetStarted: () => void;
@@ -33,7 +32,6 @@ export function SplashScreen({ onGetStarted }: SplashScreenProps) {
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between p-6">
         <Logo />
-        <ThemeToggle />
       </header>
 
       {/* Main Content */}
