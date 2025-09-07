@@ -1,0 +1,101 @@
+# Cloud Run service configuration
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: stellarforge-api
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        # CPU and memory allocation
+        run.googleapis.com/cpu: "1000m"
+        run.googleapis.com/memory: "1Gi"
+
+        # Scaling configuration
+        run.googleapis.com/execution-environment: gen2
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+
+        # Startup and request timeout
+        run.googleapis.com/timeout: "300s"
+        run.googleapis.com/cpu-throttling: "false"
+
+    spec:
+      containerConcurrency: 100
+      containers:
+        - name: stellarforge-api
+          image: gcr.io/PROJECT_ID/stellarforge-api:latest
+          ports:
+            - name: http1
+              containerPort: 8000
+
+          # Environment variables from Secret Manager
+          env:
+            - name: LOG_LEVEL
+              valueFrom:
+                secretKeyRef:
+                  name: log-level
+                  key: latest
+            - name: PRICE_UPDATE_INTERVAL
+              valueFrom:
+                secretKeyRef:
+                  name: price-update-interval
+                  key: latest
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-url
+                  key: latest
+            - name: STELLAR_NETWORK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: stellar-network-url
+                  key: latest
+            - name: API_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-secret-key
+                  key: latest
+            - name: ALLOWED_ORIGINS
+              value: '["https://stellarforge-analytics.vercel.app", "http://localhost:3000"]'
+
+          # Resource limits and requests
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+
+          # Health checks
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Startup probe
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
